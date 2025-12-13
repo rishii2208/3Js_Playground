@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Welcome to Rishi's Lab</title>
+    <style>
+        body { margin: 0; overflow: hidden; background-color: #050505; font-family: 'Courier New', Courier, monospace; user-select: none; }
+        canvas { display: block; }
+        
+        #ui {
+            position: absolute; top: 20px; left: 20px;
+            color: white; pointer-events: none; z-index: 10;
+        }
+        h1 { margin: 0; font-size: 1.5rem; text-shadow: 0 0 10px #00ffcc; margin-bottom: 10px; }
+        .hud-item { 
+            font-size: 0.9rem; color: #aaa; 
+            background: rgba(0,0,0,0.7); 
+            display: inline-block; 
+            padding: 8px 12px; 
+            border-radius: 4px; 
+            border-left: 3px solid #00ffcc; 
+            margin-bottom: 5px;
+        }
+        .controls { font-size: 0.8rem; opacity: 0.7; margin-top: 15px; line-height: 1.6; }
+        
+        /* Custom Cursor */
+        body { cursor: crosshair; }
+    </style>
+</head>
+<body>
+
+    <div id="ui">
+        <h1>Starwars Theme Particles</h1>
+        <div id="shape-display" class="hud-item">Shape: Sphere</div><br>
+        <div id="speed-display" class="hud-item">Mouse Velocity: 0</div>
+        
+        <div class="controls">
+             <b>Move:</b> Push Particles<br>
+            <b>Shake:</b> Create Turbulence<br>
+            <b>Left Click:</b> Next Shape<br>
+            <b>Right Click (Hold):</b> Black Hole<br>
+            <b>Scroll:</b> Zoom
+        </div>
+    </div>
+
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.160.0/build/three.module.js"
+            }
+        }
+    </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+
+       
+        const PARTICLE_COUNT = 25000; // ADjust as per your taste
+        const PARTICLE_SIZE = 0.12;
+        
+        // --- THREE.JS SETUP ---
+        const scene = new THREE.Scene();
+        scene.fog = new THREE.FogExp2(0x050505, 0.03); // this is fog. it is for depth
+        
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        camera.position.z = 25;
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        document.body.appendChild(renderer.domElement);
+
+        // --- PARTICLE SYSTUMM
+        const geometry = new THREE.BufferGeometry();
+        const positions = new Float32Array(PARTICLE_COUNT * 3);
+        const targetPositions = new Float32Array(PARTICLE_COUNT * 3);
+        const colors = new Float32Array(PARTICLE_COUNT * 3);
+
+        // Initial position
+        for (let i = 0; i < PARTICLE_COUNT; i++) {
+            positions[i*3] = (Math.random()-0.5)*100;
+            positions[i*3+1] = (Math.random()-0.5)*100;
+            positions[i*3+2] = (Math.random()-0.5)*100;
+
+            const color = new THREE.Color();
+            color.setHSL(i / PARTICLE_COUNT, 0.8, 0.6); // Rainbow gradient based on index
+            colors[i*3] = color.r; colors[i*3+1] = color.g; colors[i*3+2] = color.b;
+        }
+
+        geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+        geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+
+        const material = new THREE.PointsMaterial({
+            size: PARTICLE_SIZE,
+            vertexColors: true,
+            blending: THREE.AdditiveBlending,
+            depthWrite: false,
+            transparent: true,
+            opacity: 0.8
+        });
+
+        const particleSystem = new THREE.Points(geometry, material);
+        scene.add(particleSystem);
+
+        // --- TEMPLATE GENERATORS ---
+        // Using "Golden Ratio" logic for uniform sphere distribution
+        function setShape(type) {
+            const scale = 10;
+            for (let i = 0; i < PARTICLE_COUNT; i++) {
+                let x, y, z;
+                const idx = i * 3;
+                const p = i / PARTICLE_COUNT; 
+
+                if (type === 'sphere') {
+                    // Fibonacci Sphere
+                    const phi = Math.acos(1 - 2 * p);
+                    const theta = Math.PI * (1 + Math.sqrt(5)) * i;
+                    x = scale * Math.cos(theta) * Math.sin(phi);
+                    y = scale * Math.sin(theta) * Math.sin(phi);
+                    z = scale * Math.cos(phi);
+                } 
+                else if (type === 'cube') {
+                    const s = scale * 0.8;
+                    x = (Math.random() - 0.5) * s * 3;
+                    y = (Math.random() - 0.5) * s * 3;
+                    z = (Math.random() - 0.5) * s * 3;
+                    // Snap to edges
+                    if (Math.random() > 0.8) x = Math.sign(x) * s * 1.5;
+                }
+                else if (type === 'ring') {
+                    const angle = p * Math.PI * 2;
+                    const r = scale * 1.2;
+                    x = Math.cos(angle) * r;
+                    z = Math.sin(angle) * r;
+                    y = (Math.random() - 0.5) * 2;
+                }
+                else if (type === 'dna') {
+                    const strand = i % 2 === 0 ? 1 : -1;
+                    const t = (p * Math.PI * 8) - (Math.PI * 4);
+                    x = Math.cos(t + (strand * Math.PI)) * 4;
+                    z = Math.sin(t + (strand * Math.PI)) * 4;
+                    y = t * 2.5;
+                }
+                else if (type === 'galaxy') {
+                    const angle = p * Math.PI * 10; // Spirals
+                    const r = p * scale * 2;
+                    // Logarithmic spiral
+                    x = r * Math.cos(angle);
+                    z = r * Math.sin(angle);
+                    y = (Math.random()-0.5) * (15 - r) * 0.5; // Thicker in center
+                }
+
+                targetPositions[idx] = x;
+                targetPositions[idx+1] = y;
+                targetPositions[idx+2] = z;
+            }
+        }
+
+        // --- Soul of animation-mouse logic
+        const shapes = ['sphere', 'cube', 'ring', 'dna', 'galaxy'];
+        let currentShapeIdx = 0;
+        let currentShape = shapes[0];
+        setShape(currentShape);
+
+        // Raycaster plane (z=0) to map mouse 2D to 3D world
+        const mouse = new THREE.Vector2();
+        const raycaster = new THREE.Raycaster();
+        const plane = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0);
+        const mouseWorldPos = new THREE.Vector3();
+        
+        // Velocity calculator
+        let lastMouseTime = 0;
+        let lastMousePos = new THREE.Vector2();
+        let mouseVelocity = 0;
+        let isRightClicking = false;
+
+        function onMouseMove(event) {
+            // Update normalized coordinates
+            mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+            mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+
+            // Calculate Mouse Velocity
+            const now = performance.now();
+            const dt = now - lastMouseTime;
+            if (dt > 0) {
+                const dist = mouse.distanceTo(lastMousePos);
+                // Speed factor
+                const speed = dist / dt * 1000; 
+                mouseVelocity = mouseVelocity * 0.8 + speed * 0.2; // Smooth it
+                
+                document.getElementById('speed-display').innerText = `Mouse Velocity: ${mouseVelocity.toFixed(1)}`;
+                
+                lastMousePos.copy(mouse);
+                lastMouseTime = now;
+            }
+
+            // Map to 3D World (Z=0 plane)
+            raycaster.setFromCamera(mouse, camera);
+            raycaster.ray.intersectPlane(plane, mouseWorldPos);
+        }
+
+        function onMouseDown(event) {
+            if (event.button === 0) { // Left Click
+                currentShapeIdx = (currentShapeIdx + 1) % shapes.length;
+                currentShape = shapes[currentShapeIdx];
+                setShape(currentShape);
+                document.getElementById('shape-display').innerText = "Shape: " + currentShape.toUpperCase();
+            } else if (event.button === 2) { // Right Click
+                isRightClicking = true;
+            }
+        }
+
+        function onMouseUp() {
+            isRightClicking = false;
+        }
+
+        // Prevent context menu
+        window.addEventListener('contextmenu', e => e.preventDefault());
+        window.addEventListener('mousemove', onMouseMove);
+        window.addEventListener('mousedown', onMouseDown);
+        window.addEventListener('mouseup', onMouseUp);
+        
+        // Scroll Zoom
+        window.addEventListener('wheel', (e) => {
+            camera.position.z += e.deltaY * 0.01;
+            camera.position.z = THREE.MathUtils.clamp(camera.position.z, 5, 60);
+        });
+
+        // --- ANIMATION ---
+        const clock = new THREE.Clock();
+
+        function animate() {
+            requestAnimationFrame(animate);
+            const time = clock.getElapsedTime();
+            const positionsArray = geometry.attributes.position.array;
+            
+            // Color Cycle based on time
+            const hueOffset = time * 0.1;
+
+            for (let i = 0; i < PARTICLE_COUNT; i++) {
+                const idx = i * 3;
+                let px = positionsArray[idx];
+                let py = positionsArray[idx + 1];
+                let pz = positionsArray[idx + 2];
+
+                let tx = targetPositions[idx];
+                let ty = targetPositions[idx + 1];
+                let tz = targetPositions[idx + 2];
+
+                // --- 1. TURBULENCE (High Mouse Velocity) ---
+                // If shaking mouse, target position becomes random noise
+                if (mouseVelocity > 5) {
+                    tx += (Math.random() - 0.5) * mouseVelocity * 2;
+                    ty += (Math.random() - 0.5) * mouseVelocity * 2;
+                    tz += (Math.random() - 0.5) * mouseVelocity * 2;
+                } else {
+                    // Gentle idle wave
+                    tx += Math.sin(time + px * 0.1) * 0.2;
+                    ty += Math.cos(time + py * 0.1) * 0.2;
+                }
+
+                //2. MORPHING
+                const morphSpeed = 0.06;
+                px += (tx - px) * morphSpeed;
+                py += (ty - py) * morphSpeed;
+                pz += (tz - pz) * morphSpeed;
+
+                // --- 3. MOUSE INTERACTION ---
+                const dx = px - mouseWorldPos.x;
+                const dy = py - mouseWorldPos.y;
+                const dz = pz - mouseWorldPos.z; // Mouse is at z=0 by default projection
+                
+                const distSq = dx*dx + dy*dy + dz*dz;
+                const dist = Math.sqrt(distSq);
+
+                if (isRightClicking) {
+                    // BLACK HOLE (Attraction)
+                    if (dist > 0.5) { // Prevent singularity
+                        const force = 15 / distSq; 
+                        px -= dx * force * 0.1;
+                        py -= dy * force * 0.1;
+                        pz -= dz * force * 0.1;
+                    }
+                } else {
+                    // REPULSION (Hover)
+                    const radius = 6;
+                    if (dist < radius) {
+                        const force = (radius - dist) / radius;
+                        const strength = 10;
+                        px += dx * force * strength * 0.05;
+                        py += dy * force * strength * 0.05;
+                        pz += dz * force * strength * 0.05;
+                    }
+                }
+
+                positionsArray[idx] = px;
+                positionsArray[idx + 1] = py;
+                positionsArray[idx + 2] = pz;
+            }
+
+            geometry.attributes.position.needsUpdate = true;
+            
+            // Rotate the whole system slowly
+            particleSystem.rotation.y = time * 0.1;
+            particleSystem.rotation.x = Math.sin(time * 0.2) * 0.1;
+
+            renderer.render(scene, camera);
+        }
+
+        animate();
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+    </script>
+</body>
+</html>
